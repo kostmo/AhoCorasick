@@ -1,25 +1,26 @@
+cabal-version:   3.0
 name:            AhoCorasick
 version:         0.0.3
-license:         BSD3
+license:         BSD-3-Clause
 license-file:    LICENSE
 category:        Text
 copyright:       Sergey S Lymar (c) 2012
 author:          Sergey S Lymar <sergey.lymar@gmail.com>
-maintainer:      Sergey S Lymar <sergey.lymar@gmail.com>
+maintainer:      Karl Ostmo <kostmo@gmail.com>
 stability:       experimental
-tested-with:     GHC == 7.0.3
+tested-with:     GHC == 9.4.5
 synopsis:        Aho-Corasick string matching algorithm
-cabal-version:   >= 1.8
-homepage:        http://github.com/lymar/AhoCorasick
-bug-reports:     http://github.com/lymar/AhoCorasick/issues
+homepage:        http://github.com/kostmo/AhoCorasick
+bug-reports:     http://github.com/kostmo/AhoCorasick/issues
 build-type:      Simple
 description:
     Aho-Corasick string matching algorithm.
-    .
-    See homepage for examples of usage: <http://github.com/lymar/AhoCorasick>
+    
+    See usage examples in "Text.AhoCorasick".
 
-extra-source-files:
+extra-doc-files:
     README.md
+    CHANGELOG.md
 
 library
   exposed-modules:
@@ -35,6 +36,21 @@ library
     ,array
     ,mtl
 
+  default-language: Haskell2010
+
+test-suite unit-tests
+    main-is:          Main.hs
+    type:             exitcode-stdio-1.0
+    build-depends:    tasty                         >= 0.10 && < 1.5,
+                      tasty-hunit                   >= 0.10 && < 0.11,
+                      -- Imports shared with the library don't need bounds
+                      base,
+                      containers,
+                      AhoCorasick
+    hs-source-dirs:   test/unit
+    default-language: Haskell2010
+    ghc-options:      -threaded
+
 source-repository head
   type:     git
-  location: http://github.com/lymar/AhoCorasick
+  location: http://github.com/kostmo/AhoCorasick
