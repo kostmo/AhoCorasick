@@ -1,16 +1,16 @@
 {-# LANGUAGE FlexibleContexts, RankNTypes, ScopedTypeVariables, ExistentialQuantification #-}
--- Module:      Text.Hastache
--- Copyright:   Sergey S Lymar (c) 2012
--- License:     BSD3
--- Maintainer:  Sergey S Lymar <sergey.lymar@gmail.com>
--- Stability:   experimental
--- Portability: portable
---
--- Aho-Corasick string matching algorithm
+{- |
 
-{- | Aho-Corasick string matching algorithm
+Module:      Text.AhoCorasick
+Copyright:   Sergey S Lymar (c) 2012
+License:     BSD-3-Clause
+Maintainer:  Sergey S Lymar <sergey.lymar@gmail.com>
+Stability:   experimental
+Portability: portable
 
-Simplest example:
+Aho-Corasick string matching algorithm
+
+= Simplest example
 
 @
 example1 = mapM_ print $ findAll simpleSM \"ushers\" where
@@ -23,7 +23,7 @@ Position {pIndex = 2, pLength = 2, pVal = \"he\"}
 Position {pIndex = 2, pLength = 4, pVal = \"hers\"}
 @
 
-With data:
+= With data
 
 @
 example2 = mapM_ print $ findAll sm \"ushers\" where
@@ -36,7 +36,7 @@ Position {pIndex = 2, pLength = 2, pVal = 0}
 Position {pIndex = 2, pLength = 4, pVal = 3}
 @
 
-Step-by-step state machine evaluation:
+= Step-by-step state machine evaluation
 
 @
 example3 = mapM_ print $ next sm \"ushers\" where
@@ -56,21 +56,25 @@ example3 = mapM_ print $ next sm \"ushers\" where
 @
 -}
 module Text.AhoCorasick (
-      StateMachine
-    , makeStateMachine
+      -- ** Basic interface
+      makeStateMachine
     , makeSimpleStateMachine
     , findAll
     , Position(..)
+      -- ** Low-level interface
     , stateMachineStep
-    , KeyLength
     , SMStepRes(..)
     , resetStateMachine
+    -- ** Types
+    , StateMachine
+    , KeyLength
     ) where
 
 import Control.Monad.State.Lazy (execStateT, get, put)
 import Control.Monad.ST.Strict (ST, runST)
 import Control.Monad.Trans (lift)
 import Data.Array.IArray (Array, array, (!))
+import Data.Functor ((<&>))
 import Data.Hashable (Hashable)
 import Data.Maybe (fromJust)
 import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef, modifySTRef)
@@ -147,6 +151,7 @@ instance (Show val) => Show (Position val) where
         ", pLength = ", show l,
         ", pVal = ", show v,"}"]
 
+(~>) :: t1 -> (t1 -> t2) -> t2
 x ~> f = f x
 infixl 9 ~>
 
@@ -157,8 +162,7 @@ initNewTTree :: (Eq keySymb, Hashable keySymb) => ST s (TTree keySymb a s)
 initNewTTree = do
     root <- newSTRef $ TNode rootNodeId M.empty Nothing []
     lid <- newSTRef rootNodeId
-    kw <- mkDQ
-    return $ TTree root lid kw
+    TTree root lid <$> mkDQ
 
 mkNewTNode :: (Eq keySymb, Hashable keySymb) =>
     TTree keySymb a s -> ST s (TNode keySymb s)
@@ -211,9 +215,9 @@ findFailures tree = do
             fRef <- findParentFail link (tnFail node) symb
             f <- readSTRef fRef
             modifySTRef link (\n -> n {tnFail = Just fRef,
-                tnValuesIds = (tnValuesIds n) ++ (tnValuesIds f)})
+                tnValuesIds = tnValuesIds n ++ tnValuesIds f})
             ) $ tnLinks node ~> M.toList
-        return ()
+
     findParentFail link (Just cfRef) symb = do
         cf <- readSTRef cfRef
         case (M.lookup symb (tnLinks cf), cfRef == root) of
@@ -243,7 +247,7 @@ convertToStateMachine tree = do
         (n,l,fail) <- lift $ do
             n <- readSTRef node
             l <- tnLinks n ~> convertLinks
-            fail <- tnFail n ~> fromJust ~> readSTRef >>= return . tnId
+            fail <- (tnFail n ~> fromJust ~> readSTRef) <&> tnId
             return (n,l,fail)
         v <- get
         put $ (tnId n, SMElem l fail (tnValuesIds n)) : v
@@ -254,7 +258,7 @@ convertToStateMachine tree = do
     convertLinks lnksMap = do
         nl <- mapM (\(symb, link) -> do
             l <- readSTRef link
-            return $ (symb, tnId l)
+            return (symb, tnId l)
             ) $ M.toList lnksMap
         return $ M.fromList nl
 
@@ -267,16 +271,16 @@ stateMachineStep :: (Eq keySymb, Hashable keySymb) =>
 stateMachineStep sm symb =
     case (M.lookup symb links, currentState == rootNodeId) of
         (Just nextState, _) -> SMStepRes
-            ((smStates sm) ! nextState ~> smeValuesIds ~> convertToVals)
+            (smStates sm ! nextState ~> smeValuesIds ~> convertToVals)
             (sm { smState = nextState })
         (Nothing, True) -> SMStepRes [] sm
         (Nothing, False) -> stateMachineStep
             (sm { smState = smeFail currentNode}) symb
     where
     currentState = smState sm
-    currentNode = (smStates sm) ! currentState
+    currentNode = smStates sm ! currentState
     links = smeLinks currentNode
-    convertToVals idx = map (\i -> smValues sm ! i) idx
+    convertToVals = map (\i -> smValues sm ! i)
 
 findAll :: (Eq keySymb, Hashable keySymb) =>
     StateMachine keySymb val -> [keySymb] -> [Position val]
@@ -286,9 +290,10 @@ findAll sm str =
     step _ [] = []
     step csm ((idx,symb):next) = case stateMachineStep csm symb of
         SMStepRes [] newsm -> step newsm next
-        SMStepRes r newsm -> (map (cnvToPos idx) r) : (step newsm next)
+        SMStepRes r newsm -> map (cnvToPos idx) r : step newsm next
     cnvToPos idx (keyLength, val) = Position (idx - keyLength + 1) keyLength val
 
+-- | Returns search keys as values
 makeSimpleStateMachine :: (Eq keySymb, Hashable keySymb) =>
     [[keySymb]] -> StateMachine keySymb [keySymb]
 makeSimpleStateMachine keys = runST $ do
@@ -297,11 +302,12 @@ makeSimpleStateMachine keys = runST $ do
     findFailures tree
     convertToStateMachine tree
 
+-- | Associate custom values with the search keys
 makeStateMachine :: (Eq keySymb, Hashable keySymb) =>
     [([keySymb], val)] -> StateMachine keySymb val
 makeStateMachine kv = runST $ do
     tree <- initNewTTree
-    mapM_ (\(s,v) -> addKeyVal tree s v) kv
+    mapM_ (uncurry (addKeyVal tree)) kv
     findFailures tree
     convertToStateMachine tree
 
