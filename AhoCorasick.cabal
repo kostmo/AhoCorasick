@@ -41,7 +41,7 @@ library
 test-suite unit-tests
     main-is:          Main.hs
     type:             exitcode-stdio-1.0
-    build-depends:    tasty                         >= 0.10 && < 1.5,
+    build-depends:    tasty                         >= 0.10 && < 1.6,
                       tasty-hunit                   >= 0.10 && < 0.11,
                       -- Imports shared with the library don't need bounds
                       base,
